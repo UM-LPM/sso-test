@@ -9,6 +9,7 @@ Testing SAML protected REST
 
 - [auth0 saml](https://auth0.com/docs/authenticate/protocols/saml/saml-sso-integrations/configure-auth0-saml-identity-provider)
 - [authorization codes](https://www.quora.com/Why-does-OAuth-server-return-a-authorization-code-instead-of-access-token-in-the-first-step)
+- [custom tabs authentication](https://joebirch.co/android/oauth-on-android-with-custom-tabs/)
 
 - [samlify](https://samlify.js.org/#/)
 - [samlify example](https://github.com/authenio/react-samlify)
