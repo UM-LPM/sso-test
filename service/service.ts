@@ -1,5 +1,6 @@
 /// <reference path="./declarations" />
 
+import url from 'node:url';
 import * as fs from 'fs';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
@@ -11,11 +12,25 @@ import express from 'express';
 import session from "express-session";
 
 const app = express();
-const port = 80;
+const port = 8080;
 const secret = 'secret'; //XXX: replace
+
+declare module 'express-session' {
+  interface SessionData {
+    accountId: string;
+  }
+}
 
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(cookieParser());
+app.use(session({
+    proxy: true,
+    secret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {secure: true},
+}));
+
 saml.setSchemaValidator(validator);
 
 const configuration = {
@@ -23,24 +38,37 @@ const configuration = {
         {
             client_id: 'test',
             client_secret: 'test',
+            grant_types: ['authorization_code'],
             redirect_uris: ['https://oidcdebugger.com/debug'],
         }
     ],
+    interactions: {
+        async url(ctx: any, interaction: any) {
+            return `/oidc/interaction/${interaction.uid}`;
+        }
+    },
     cookies: {
-        keys: ["secret"],
+        keys: [secret],
         short: {
             httpOnly: true,
+	    secure: true,
+	    signed: true,
             overwrite: true,
-            secure: true,
-            sameSite: 'lax' as const
+            sameSite: 'none' as const
         }
-    }
+    },
+    features: {
+        devInteractions: {
+            enabled: false as const,
+        }
+    },
 };
 
-const oidc = new Provider(`http://localhost:${port}`, configuration);
+const oidc = new Provider(`https://sso-test.lpm.feri.um.si`, configuration);
+oidc.proxy = true;
 
 const sp = saml.ServiceProvider({
-    entityID: 'http://localhost:8080/metadata', //XXX: make a parameter
+    entityID: 'https://sso-test.lpm.feri.um.si/metadata', //XXX: make a parameter
     privateKey: fs.readFileSync('./dev-bzlda3fl7ht5also.pem'),
 })
 
@@ -48,66 +76,113 @@ const idp = saml.IdentityProvider({
     metadata: fs.readFileSync("./dev-bzlda3fl7ht5also_eu_auth0_com-metadata.xml")
 })
 
-app.get('/interaction/:uid', async (req, res, next) => {
-    const dets = await oidc.interactionDetails(req, res);
-    const client = await oidc.Client.find(dets.params.client_id as string);
-    console.log(dets);
-    console.log(req.cookies);
+app.get('/oidc/interaction/:uid', async (req, res, next) => {
+    try {
+        const {uid, prompt, params} = await oidc.interactionDetails(req, res);
+        const client = await oidc.Client.find(params.client_id as string);
 
-    return res.redirect(`/interaction/${dets.uid}/login`)
+        console.log(prompt);
+        console.log(client);
+        switch (prompt.name) {
+            case 'login':
+                return res.redirect(303, `/saml/login/${uid}`);
+            case 'consent':
+                return res.redirect(303, `/oidc/interaction/${uid}/consent`);
+            default:
+                return undefined;
+        }
+    } catch (err) {
+        next(err);
+    }
 });
 
-app.get('/interaction/:uid/login', async (req, res, next) => {
-    console.log("HHEE");
+app.get('/oidc/interaction/:uid/login', async (req, res, next) => {
+    try {
+        if (req.session.accountId === undefined) {
+            throw Error("Missing accountId");
+        }
+        const result = {
+            login: {
+                accountId: req.session.accountId
+            }
+        };
+        await oidc.interactionFinished(req, res, result, {mergeWithLastSubmission: false});
+    } catch (err) {
+        next(err);
+    }
+});
 
+app.get('/oidc/interaction/:uid/consent', async (req, res, next) => {
+    try {
+        const dets = await oidc.interactionDetails(req, res);
+        if (dets.session === undefined) {
+            throw Error("Missing session");
+        }
+
+        const {prompt: {name, details}, params, session: {accountId}} = dets;
+        let {grantId} = dets;
+        let grant;
+
+        if (grantId) {
+            grant = await oidc.Grant.find(grantId);
+        } else {
+            grant = new oidc.Grant({
+                accountId,
+                clientId: params.client_id as string,
+            });
+        }
+        if (grant === undefined) {
+            throw Error("Missing grant");
+        }
+
+        if (details.missingOIDCScope) {
+            grant.addOIDCScope((details.missingOIDCScope as string[]).join(' '));
+        }
+        if (details.missingOIDCClaims) {
+            grant.addOIDCClaims(details.missingOIDCClaims as string[]);
+        }
+        if (details.missingResourceScopes) {
+            for (const [indicator, scopes] of Object.entries(details.missingResourceScopes)) {
+                grant.addResourceScope(indicator, scopes.join(' '));
+            }
+        }
+
+        grantId = await grant.save();
+
+        const consent: {grantId?: string} = {};
+        if (!dets.grantId) {
+            consent.grantId = grantId;
+        }
+
+        const result = {consent};
+        await oidc.interactionFinished(req, res, result, {mergeWithLastSubmission: true});
+    } catch (err) {
+        next(err);
+    }
+});
+
+app.get('/saml/login/:uid', async (req, res) => {
+    const uid = req.params.uid;
     const {id, context} = await sp.createLoginRequest(idp, 'redirect'); 
-    console.log(id)
-    return res.redirect(context);
+    return res.redirect(303, context + `&RelayState=${uid}`);
 });
 
-app.post('/acs', async (req, res) => {
-    //const dets = await oidc.interactionDetails(req, res);
+app.post('/saml/acs', async (req, res) => {
+    const uid = req.body.RelayState;
     const {extract} = await sp.parseLoginResponse(idp, 'post', req);
-    //console.log(dets);
-    console.log(req.cookies);
-    console.log("HEEEEREEEE");
-    /*console.log(extract);
-    console.log(req.query);
-    console.log(req.body);
-    console.log(req.cookies);*/
-
-    //return res.redirect(302, `/interaction/${req.body.RelayState}/login`)
-
-    //var token = jwt.sign({test: "test"}, secret);
-    //return res.redirect(`sso-test://app/accept?token=${token}`);
-    res.cookie('extract', extract);
-    return res.redirect("/test");
-})
-
-app.get('/test', async (req, res, next) => {
-    const dets = await oidc.interactionDetails(req, res);
-    console.log("HHEE");
-    console.log(req.cookies);
-    return ""
+    req.session.accountId = extract.nameID;
+    return res.redirect(303, `/oidc/interaction/${uid}/login`);
 });
 
 app.get('/metadata', (req, res) => {
     res.header('Content-Type', 'text/xml').send(sp.getMetadata());
 });
 
-app.get("/", (req, res) => {
+app.get('/', (req, res) => {
     res.send("Hello world!");
 });
 
-app.use(
-    session({
-        proxy: true,
-        secret: 'keyboard cat',
-        resave: false,
-        saveUninitialized: true,
-        cookie: { secure: true },
-    })
-);
+app.use('/oidc', oidc.callback());
+app.listen(port)
 
-app.use(oidc.callback());
-app.listen(port, '164.8.230.207')
+// vim: et sts=4 ts=4 sw=4
