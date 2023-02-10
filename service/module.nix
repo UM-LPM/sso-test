@@ -56,7 +56,7 @@ in
         SESSION_SECRET = cfg.sessionSecret;
         DOMAIN = cfg.domain;
         #OIDC_CERTIFICATE_KEY = cfg.oidcCertificateKey;
-        SAML_CERTIFICATE = cfg.samlCertificateKey;
+        SAML_CERTIFICATE_KEY = cfg.samlCertificateKey;
         IDP_METADATA = cfg.idpMetadata;
       };
       serviceConfig = {
