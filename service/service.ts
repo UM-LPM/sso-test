@@ -83,6 +83,15 @@ oidc.proxy = true;
 const sp = saml.ServiceProvider({
     entityID: `https://${domain}/saml/metadata`,
     privateKey: fs.readFileSync(samlCertificateKey),
+    authnRequestsSigned: true,
+    wantAssertionsSigned: true,
+    assertionConsumerService: [
+        {
+            isDefault: true,
+            Binding: "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+            Location: "https://${domain}/saml/metadata"
+        }
+    ]
 })
 
 const idp = saml.IdentityProvider({
