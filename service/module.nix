@@ -55,8 +55,8 @@ in
         PORT = "8080";
         SESSION_SECRET = cfg.sessionSecret;
         DOMAIN = cfg.domain;
-        OIDC_CERTIFICATE_KEY = cfg.oidcCertificateKey;
-        #SAML_CERTIFICATE = cfg.samlCertificate;
+        #OIDC_CERTIFICATE_KEY = cfg.oidcCertificateKey;
+        SAML_CERTIFICATE = cfg.samlCertificateKey;
         IDP_METADATA = cfg.idpMetadata;
       };
       serviceConfig = {
