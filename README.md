@@ -1,6 +1,15 @@
 # sso-test
 Testing SAML protected REST
 
+## Progress
+
+- [x] SAML
+- [ ] OAuth2/OIDC
+- [ ] AppAuth
+
+## Notes
+We would just like to test the SAML part.
+
 ## Links
 
 - [aai](https://aai.arnes.si/)
