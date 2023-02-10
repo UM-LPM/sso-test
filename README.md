@@ -8,8 +8,8 @@ Testing SAML protected REST
 - [ ] AppAuth
 
 ## Server configuration
-https://github.com/UM-LPM/server/tree/master/machines/sso-test.l
-https://github.com/UM-LPM/sso-test/blob/main/service/module.nix
+- [machine](https://github.com/UM-LPM/server/tree/master/machines/sso-test.l)
+- [module](https://github.com/UM-LPM/sso-test/blob/main/service/module.nix)
 
 ## Notes
 We would just like to test the SAML part.
