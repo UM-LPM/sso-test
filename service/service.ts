@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /// <reference path="./declarations" />
 
 import url from 'node:url';
