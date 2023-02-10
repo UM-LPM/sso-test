@@ -28,6 +28,11 @@ in
         type = types.path;
       };
 
+      samlCertificate = mkOption {
+        description = "SAML certificate";
+        type = types.path;
+      };
+
       samlCertificateKey = mkOption {
         description = "SAML certificate key";
         type = types.path;
@@ -57,6 +62,7 @@ in
         DOMAIN = cfg.domain;
         #OIDC_CERTIFICATE_KEY = cfg.oidcCertificateKey;
         SAML_CERTIFICATE_KEY = cfg.samlCertificateKey;
+        SAML_CERTIFICATE = cfg.samlCertificate;
         IDP_METADATA = cfg.idpMetadata;
       };
       serviceConfig = {

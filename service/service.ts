@@ -25,6 +25,7 @@ function env(name: string): string {
 const port: number = parseInt(env("PORT"), 10);
 const sessionSecret: string = env("SESSION_SECRET");
 const domain: string = env("DOMAIN");
+const samlCertificate: string = env("SAML_CERTIFICATE");
 const samlCertificateKey: string = env("SAML_CERTIFICATE_KEY");
 const idpMetadata: string = env("IDP_METADATA");
 
@@ -85,11 +86,12 @@ const sp = saml.ServiceProvider({
     privateKey: fs.readFileSync(samlCertificateKey),
     authnRequestsSigned: true,
     wantAssertionsSigned: true,
+    signingCert: fs.readFileSync(samlCertificate),
     assertionConsumerService: [
         {
             isDefault: true,
             Binding: "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
-            Location: "https://${domain}/saml/metadata"
+            Location: `https://${domain}/saml/metadata`
         }
     ]
 })
