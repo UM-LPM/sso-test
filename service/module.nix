@@ -20,7 +20,7 @@ in
 
       domain = mkOption {
         description = "Domain";
-        type = types.path;
+        type = types.str;
       };
 
       sessionSecret = mkOption {
