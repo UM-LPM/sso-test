@@ -13,6 +13,11 @@ in
         type = types.ints.positive;
       };
 
+      user = mkOption {
+        description = "User";
+        type = types.str;
+      };
+
       domain = mkOption {
         description = "Domain";
         type = types.path;
@@ -41,10 +46,6 @@ in
   };
 
   config = {
-    users.users.sso-test-runner = {
-      isSystemUser = true;
-    };
-
     systemd.services.ssoTest = {
       wantedBy = ["multi-user.target"]; 
       after = ["network.target"];
@@ -60,7 +61,7 @@ in
       };
       serviceConfig = {
         Type = "simple";
-        User = "sso-test-runner";
+        User = cfg.user;
         Restart = "always";
         ExecStart = "${pkgs.service}/bin/service";
       };

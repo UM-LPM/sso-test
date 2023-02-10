@@ -23,7 +23,7 @@ function env(name: string): string {
 }
 const port: number = parseInt(env("PORT"), 10);
 const sessionSecret: string = env("SESSION_SECRET");
-const hostname: string = env("DOMAIN");
+const domain: string = env("DOMAIN");
 const samlCertificateKey: string = env("SAML_CERTIFICATE_KEY");
 const idpMetadata: string = env("IDP_METADATA");
 
@@ -76,11 +76,11 @@ const configuration = {
     },
 };
 
-const oidc = new Provider(`https://${hostname}`, configuration);
+const oidc = new Provider(`https://${domain}`, configuration);
 oidc.proxy = true;
 
 const sp = saml.ServiceProvider({
-    entityID: `https://${hostname}/saml/metadata`,
+    entityID: `https://${domain}/saml/metadata`,
     privateKey: fs.readFileSync(samlCertificateKey),
 })
 
