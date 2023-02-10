@@ -5,27 +5,39 @@ import * as fs from 'fs';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import * as saml from 'samlify';
-import * as validator from '@authenio/samlify-xsd-schema-validator';
+import * as validator from '@authenio/samlify-node-xmllint';
 import * as jwt from 'jsonwebtoken';
 import Provider from 'oidc-provider';
 import express from 'express';
 import session from "express-session";
 
 const app = express();
-const port = 8080;
-const secret = 'secret'; //XXX: replace
+
+function env(name: string): string {
+    class Missing extends Error {}
+    const value = process.env[name];
+    if (!value) {
+        throw new Missing(name);
+    } 
+    return value;
+}
+const port: number = parseInt(env("PORT"), 10);
+const sessionSecret: string = env("SESSION_SECRET");
+const hostname: string = env("DOMAIN");
+const samlCertificateKey: string = env("SAML_CERTIFICATE_KEY");
+const idpMetadata: string = env("IDP_METADATA");
 
 declare module 'express-session' {
-  interface SessionData {
-    accountId: string;
-  }
+    interface SessionData {
+        accountId: string;
+    }
 }
 
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(cookieParser());
 app.use(session({
     proxy: true,
-    secret,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {secure: true},
@@ -48,11 +60,11 @@ const configuration = {
         }
     },
     cookies: {
-        keys: [secret],
+        keys: [sessionSecret],
         short: {
             httpOnly: true,
-	    secure: true,
-	    signed: true,
+            secure: true,
+            signed: true,
             overwrite: true,
             sameSite: 'none' as const
         }
@@ -64,16 +76,16 @@ const configuration = {
     },
 };
 
-const oidc = new Provider(`https://sso-test.lpm.feri.um.si`, configuration);
+const oidc = new Provider(`https://${hostname}`, configuration);
 oidc.proxy = true;
 
 const sp = saml.ServiceProvider({
-    entityID: 'https://sso-test.lpm.feri.um.si/metadata', //XXX: make a parameter
-    privateKey: fs.readFileSync('./dev-bzlda3fl7ht5also.pem'),
+    entityID: `https://${hostname}/saml/metadata`,
+    privateKey: fs.readFileSync(samlCertificateKey),
 })
 
 const idp = saml.IdentityProvider({
-    metadata: fs.readFileSync("./dev-bzlda3fl7ht5also_eu_auth0_com-metadata.xml")
+    metadata: fs.readFileSync(idpMetadata)
 })
 
 app.get('/oidc/interaction/:uid', async (req, res, next) => {
@@ -174,7 +186,7 @@ app.post('/saml/acs', async (req, res) => {
     return res.redirect(303, `/oidc/interaction/${uid}/login`);
 });
 
-app.get('/metadata', (req, res) => {
+app.get('/saml/metadata', (req, res) => {
     res.header('Content-Type', 'text/xml').send(sp.getMetadata());
 });
 

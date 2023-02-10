@@ -1,7 +1,7 @@
 let
-  pkgs = import <nixos> {};
+  pkgs = import <nixpkgs> {};
   node = pkgs.nodejs-18_x;
 in
 pkgs.mkShell {
-  buildInputs = [node pkgs.neovim pkgs.jre pkgs.nodePackages_latest.npm];
+  buildInputs = [node pkgs.jre pkgs.nodePackages.npm];
 }
