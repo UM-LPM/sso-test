@@ -90,8 +90,8 @@ const sp = saml.ServiceProvider({
     assertionConsumerService: [
         {
             isDefault: true,
-            Binding: "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
-            Location: `https://${domain}/saml/metadata`
+            Binding: "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+            Location: `https://${domain}/saml/acs`
         }
     ]
 })
