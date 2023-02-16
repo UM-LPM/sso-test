@@ -18,7 +18,7 @@ function discovery(sp: saml.ServiceProviderInstance, discoveryLocation: string) 
   url.search = new URLSearchParams({entityID: sp.entityMeta.getEntityID()}).toString()
   //const res = await fetch(url.toString());
 
-  return url;
+  return url.toString();
 }
 
 export default (displayName: string, discoveryLocation: string, idps: {[index: string]: saml.IdentityProviderInstance}, sp: saml.ServiceProviderInstance, metadata: string) => ({
