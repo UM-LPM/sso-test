@@ -33,16 +33,16 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node build/src/service.js",
+    "start": "node build/service.js",
     "test": "node --trace-uncaught --test build/test/index.js"
   },
   "name": "service",
   "bin": {
-    "service": "build/src/service.js"
+    "service": "build/service.js"
   },
   "type": "module",
   "version": "1.0.0",
-  "main": "build/src/service.js",
+  "main": "build/service.js",
   "author": "",
   "license": "ISC",
   "description": ""
