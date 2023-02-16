@@ -39,21 +39,22 @@ const idp = saml.IdentityProvider({
 })
 
 const sp = saml.ServiceProvider({
-  entityID: `${endpoint}/prov/test/metadata`,
+  entityID: `${endpoint}/prov/aai/metadata`,
   authnRequestsSigned: true,
   wantAssertionsSigned: true,
-  signingCert: spCertificate,
-  privateKey: spCertificateKey,
+  signingCert: fs.readFileSync(spCertificate),
+  privateKey: fs.readFileSync(spCertificateKey),
   assertionConsumerService: [
     {
       isDefault: true,
       Binding: 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST',
-      Location: `${endpoint}/prov/test/acs`
+      Location: `${endpoint}/prov/aai/acs`
     }
   ]
 })
 
-const metadata = ``;
+const metadata = `
+`;
 
 const oidc = new Provider(`${endpoint}/oidc`, {
   clients: [
