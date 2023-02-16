@@ -15,7 +15,7 @@ const formParser = bodyParser.urlencoded({extended: false});
 
 function discovery(sp: saml.ServiceProviderInstance, discoveryLocation: string) {
   const url = new URL(discoveryLocation);
-  url.search = new URLSearchParams({entityID: sp.entityMeta.getEntityID()}).toString()
+  url.search = new URLSearchParams({entityID: sp.entityMeta.getEntityID(), return: 'https://sso-test.lpm.feri.um.si/prov/aai/disco'}).toString()
   //const res = await fetch(url.toString());
 
   return url.toString();
