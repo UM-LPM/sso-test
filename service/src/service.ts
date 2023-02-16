@@ -61,7 +61,7 @@ const oidc = new Provider(`${endpoint}/oidc`, {
       client_id: 'test',
       client_secret: 'test',
       grant_types: ['authorization_code'],
-      redirect_uris: [`${endpoint}/cb`]
+      redirect_uris: ['https://oidcdebugger.com/debug'],
     }
   ],
   interactions: {
