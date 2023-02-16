@@ -107,6 +107,7 @@ oidc.proxy = true;
 declare module 'express-session' {
   interface SessionData {
     accountId: string;
+    entityID: string;
   }
 }
 
