@@ -1,13 +1,26 @@
 {
   "dependencies": {
     "@authenio/samlify-node-xmllint": "^2.0.0",
+    "@types/node-forge": "^1.3.1",
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.10",
+    "@types/sax": "^1.2.4",
     "body-parser": "^1.20.1",
     "cookie-parser": "^1.4.6",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
+    "fast-xml-parser": "^4.1.2",
     "jsonwebtoken": "^9.0.0",
+    "keygrip": "^1.1.0",
+    "node-fetch": "^3.3.0",
+    "node-forge": "^1.3.1",
     "oidc-provider": "^8.1.0",
-    "samlify": "^2.8.7"
+    "openid-client": "^5.4.0",
+    "puppeteer": "^19.7.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "samlify": "^2.8.7",
+    "sax": "^1.2.4"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.3",
@@ -15,11 +28,13 @@
     "@types/express-session": "^1.17.5",
     "@types/jsonwebtoken": "^9.0.0",
     "@types/oidc-provider": "^8.1.0",
+    "@types/puppeteer": "^7.0.4",
     "typescript": "^4.9.4"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node build/service.js"
+    "start": "node build/service.js",
+    "test": "node --trace-uncaught --test build/test/index.js"
   },
   "name": "service",
   "bin": {
