@@ -37,7 +37,7 @@ const endpoint = `https://${domain}`;
 
 const sp = saml.ServiceProvider({
   entityID: `${endpoint}/prov/aai/metadata`,
-  authnRequestsSigned: true,
+  authnRequestsSigned: false,
   wantAssertionsSigned: true,
   signingCert: fs.readFileSync(spCertificate),
   privateKey: fs.readFileSync(spCertificateKey),
