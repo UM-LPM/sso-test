@@ -15,7 +15,7 @@ import fetch from 'node-fetch';
 import oidcRouter from './login.js';
 import samlLoginProvider from './sp2.js';
 import idpRouter from './idp.js';
-//import metadata from './metadata.js';
+import metadataParser from './metadata.js';
 
 function env(name: string): string {
     class Missing extends Error {}
@@ -34,9 +34,6 @@ const idpMetadata: string = env('IDP_METADATA');
 
 const endpoint = `https://${domain}`;
 
-const idp = saml.IdentityProvider({
-    metadata: fs.readFileSync(idpMetadata)
-})
 
 const sp = saml.ServiceProvider({
   entityID: `${endpoint}/prov/aai/metadata`,
@@ -121,9 +118,21 @@ app.use(session({
   cookie: {secure: true},
 }));
 
+const idps: {[index: string]: saml.IdentityProviderInstance} = {}
+const res = await fetch('https://ds.aai.arnes.si/metadata/aai.arnes.si.sha256.xml');
+let entries = await metadataParser(res.body!);
+
+for (const entity of entries) {
+  idps[entity.entityID] = saml.IdentityProvider({
+    entityID: entity.entityID,
+    signingCert: (entity.idp?.certificates.find((cert) => cert.use === "signing"))?.data,
+    wantAuthnRequestsSigned: entity.idp?.WantAuthnRequestsSigned,
+    singleSignOnService: [entity.idp?.SingleSignOnService!]
+  });
+}
+
 app.use(oidcRouter(oidc, {
-  'aai': samlLoginProvider('ArnesAAI', 'https://ds.aai.arnes.si/simplesaml/saml2/sp/idpdisco.php', {}, sp, metadata)
+  'aai': samlLoginProvider('ArnesAAI', 'https://ds.aai.arnes.si/simplesaml/saml2/sp/idpdisco.php', idps, sp, metadata)
 }));
-app.use('/idp', idpRouter(idp, sp));
 
 app.listen(port);

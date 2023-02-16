@@ -8,9 +8,16 @@ export interface Certificate {
   data?: string,
 }
 
+export interface Service {
+  Binding: string,
+  Location: string,
+}
+
 export interface Idp {
   WantAuthnRequestsSigned?: boolean,
   certificates: Certificate[],
+  SingleSignOnService?: Service,
+  SingleLogoutService?: Service,
 }
 
 export interface Entity {
@@ -33,10 +40,10 @@ function parseUse(s: string): CertificateUse | undefined {
   return undefined
 }
 
-export default async (stream: Stream) => {
+export default async function(stream: Stream): Promise<Entity[]> {
   const parser = sax.createStream(true);
 
-  const entities: {[index: string]: Entity} = {};
+  const entities: Entity[] = [];
   let entity: Entity | undefined;
   let idp: Idp | undefined;
   let certificate: Certificate | undefined;
@@ -60,13 +67,29 @@ export default async (stream: Stream) => {
       case 'md:KeyDescriptor':
         if (entity && idp) {
           certificate = {
-            use: parseUse(tag.attributes.value),
+            use: parseUse(tag.attributes.use),
           };
         }
         break;
       case 'ds:X509Certificate':
         if (entity && idp && certificate) {
           certificateData = true;
+        }
+        break;
+      case 'md:SingleSignOnService':
+        if (entity && idp) {
+          idp.SingleSignOnService = {
+            Binding: tag.attributes.Binding,
+            Location: tag.attributes.Location,
+          };
+        }
+        break;
+      case 'md:SingleLogoutService':
+        if (entity && idp) {
+          idp.SingleLogoutService = {
+            Binding: tag.attributes.Binding,
+            Location: tag.attributes.Location,
+          };
         }
         break;
     }
@@ -82,7 +105,7 @@ export default async (stream: Stream) => {
     switch (name) {
       case 'md:EntityDescriptor':
         if (entity?.idp) { // Only preserve the entities with an identity provider
-          entities[entity.entityID] = entity;
+          entities.push(entity);
         }
         entity = undefined;
         break;
@@ -100,7 +123,7 @@ export default async (stream: Stream) => {
     }
   });
 
-  const end = new Promise((resolve, reject) => {
+  const end: Promise<Entity[]> = new Promise((resolve, reject) => {
     parser.on('end', () => resolve(entities));
     parser.on('error', (e) => reject(e));
   });
