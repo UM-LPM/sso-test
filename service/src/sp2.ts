@@ -30,7 +30,7 @@ export default (displayName: string, discoveryLocation: string, idps: {[index: s
     //const url = new URL(context);
     //url.searchParams.append('RelayState', uid);
     //return url.toString()
-    return discovery(sp, discoveryLocation)
+    return Promise.resolve(discovery(sp, discoveryLocation))
   },
 
   router(redirect: (uid: string) => string) {
