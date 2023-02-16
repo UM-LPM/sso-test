@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+/// <reference path="./declarations" />
+
 import fs from 'node:fs';
 import https from 'node:https';
 import {once, EventEmitter} from 'node:events';
