@@ -49,7 +49,7 @@ export default (displayName: string, discoveryLocation: string, idps: {[index: s
     });
 
     router.get('/metadata', (req, res) => {
-      res.header('Content-Type', 'text/xml').send(sp.getMetadata());
+      res.header('Content-Type', 'text/xml').send(metadata);
     });
 
     return router;
