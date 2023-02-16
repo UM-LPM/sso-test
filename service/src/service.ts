@@ -102,7 +102,7 @@ const oidc = new Provider(`${endpoint}/oidc`, {
     },
   },
 });
-
+oidc.proxy = true;
 
 declare module 'express-session' {
   interface SessionData {
