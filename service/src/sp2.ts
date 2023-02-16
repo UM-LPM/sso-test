@@ -13,12 +13,12 @@ saml.setSchemaValidator(validator);
 
 const formParser = bodyParser.urlencoded({extended: false});
 
-async function discovery(sp: saml.ServiceProviderInstance, discoveryLocation: string) {
+function discovery(sp: saml.ServiceProviderInstance, discoveryLocation: string) {
   const url = new URL(discoveryLocation);
   url.search = new URLSearchParams({entityID: sp.entityMeta.getEntityID()}).toString()
-  const res = await fetch(url.toString());
+  //const res = await fetch(url.toString());
 
-  console.log(res.url);
+  return url;
 }
 
 export default (displayName: string, discoveryLocation: string, idps: {[index: string]: saml.IdentityProviderInstance}, sp: saml.ServiceProviderInstance, metadata: string) => ({
@@ -26,12 +26,11 @@ export default (displayName: string, discoveryLocation: string, idps: {[index: s
   displayName,
 
   async redirect(uid: string) {
-    await discovery(sp, discoveryLocation)
     //const {id, context} = await sp.createLoginRequest(idp, 'redirect'); 
     //const url = new URL(context);
     //url.searchParams.append('RelayState', uid);
     //return url.toString()
-    return "";
+    return discovery(sp, discoveryLocation)
   },
 
   router(redirect: (uid: string) => string) {
