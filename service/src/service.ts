@@ -37,7 +37,7 @@ const endpoint = `https://${domain}`;
 
 const sp = saml.ServiceProvider({
   entityID: `${endpoint}/prov/aai/metadata`,
-  authnRequestsSigned: false,
+  authnRequestsSigned: true,
   wantAssertionsSigned: true,
   signingCert: fs.readFileSync(spCertificate),
   privateKey: fs.readFileSync(spCertificateKey),
@@ -126,7 +126,7 @@ for (const entity of entries) {
   idps[entity.entityID] = saml.IdentityProvider({
     entityID: entity.entityID,
     signingCert: (entity.idp?.certificates.find((cert) => cert.use === "signing"))?.data,
-    wantAuthnRequestsSigned: entity.idp?.WantAuthnRequestsSigned,
+    wantAuthnRequestsSigned: true,
     singleSignOnService: [entity.idp?.SingleSignOnService!]
   });
 }
