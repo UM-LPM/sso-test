@@ -19,6 +19,20 @@ import {LoginProvider} from './types.js';
 
 //export const app = express();
 
+//function env(name: string): string {
+//    class Missing extends Error {}
+//    const value = process.env[name];
+//    if (!value) {
+//        throw new Missing(name);
+//    } 
+//    return value;
+//}
+//const port: number = parseInt(env('PORT'), 10);
+//const sessionSecret: string = env('SESSION_SECRET');
+//const domain: string = env('DOMAIN');
+//const samlCertificate: string = env('SAML_CERTIFICATE')
+//const samlCertificateKey: string = env('SAML_CERTIFICATE_KEY');
+//const idpMetadata: string = env('IDP_METADATA');
 
 //    const sp = saml.ServiceProvider({
 //        entityID: `https://${domain}/saml/metadata`,
@@ -126,11 +140,8 @@ export default (oidc: Provider, provs: {[name: string]: LoginProvider}) => {
       const interactionDetails = await oidc.interactionDetails(req, res);
       const {uid, prompt, params} = interactionDetails;
 
-      if (req.session.entityID === undefined) {
-        const url =  await provs["aai"].discovery(uid);
-        return res.redirect(303, url);
-      } else if (req.session.accountId === undefined) {
-        const url =  await provs["aai"].redirect(req.session.entityID, uid);
+      if (req.session.accountId === undefined) {
+        const url =  await provs[req.body.provider].redirect(uid);
         return res.redirect(303, url);
       } else {
         const result = {

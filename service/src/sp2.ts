@@ -1,5 +1,7 @@
-import * as saml from 'samlify';
-import * as validator from '@authenio/samlify-node-xmllint';
+//import * as saml from 'samlify';
+//import * as validator from '@authenio/samlify-node-xmllint';
+
+import saml from "@node-saml/node-saml"
 import express from 'express';
 import session from 'express-session';
 import bodyParser from 'body-parser';
@@ -9,42 +11,48 @@ import fetch from 'node-fetch';
 
 import {LoginProvider} from './types.js';
 
-saml.setSchemaValidator(validator);
+//saml.setSchemaValidator(validator);
 
 const formParser = bodyParser.urlencoded({extended: false});
 
-export default (displayName: string, discoveryLocation: string, idps: {[index: string]: saml.IdentityProviderInstance}, sp: saml.ServiceProviderInstance, metadata: string) => ({
+export default (displayName: string, discoveryLocation: string, idps: {[index: string]: any}, sp: any, metadata: string) => ({
 
   displayName,
 
-  async discovery(uid: string) {
+  async redirect(entityID: string) {
     const url = new URL(discoveryLocation);
-    url.search = new URLSearchParams({entityID: sp.entityMeta.getEntityID(), return: `https://sso-test.lpm.feri.um.si/prov/aai/disco?uid=${uid}`}).toString()
-    return Promise.resolve(url.toString())
-  },
+    url.search = new URLSearchParams({entityID: sp.issuer, return: `https://sso-test.lpm.feri.um.si/prov/aai/disco`}).toString()
+    const res = await fetch(url.toString(), {redirect: 'manual'});
+    if (!res.redirected) {
+      throw new Error("Unsuccessful discovery!");
+    }
+    console.error(res.headers.get('location'));
 
-  async redirect(entityID: string, uid: string) {
-    const {id, context} = await sp.createLoginRequest(idps[entityID], 'redirect'); 
-    const url = new URL(context);
-    url.searchParams.append('RelayState', uid);
-    return url.toString()
+    return "";
+
+
+    //const {id, context} = await sp.createLoginRequest(idps[entityID], 'redirect'); 
+    //const url = new URL(context);
+    //url.searchParams.append('RelayState', uid);
+    //return url.toString()
   },
 
   router(redirect: (uid: string) => string) {
     const router = express.Router();
 
-    router.get('/disco', async (req, res) => {
-      const uid = req.query.uid as string;
-      req.session.entityID = req.query.entityID as string;
-      return res.send(postBack(Account({endpoint: redirect(uid)})));
-    });
+    // Dummy path, not intended to be called, the redirect is intercepted and never makes it to the user-agent.
+    router.get('/disco', async (req, res) => {});
+
+      //const uid = req.query.uid as string;
+      //req.session.entityID = req.query.entityID as string;
+      //return res.send(postBack(Account({endpoint: redirect(uid)})));
 
     router.post('/acs', formParser, async (req, res) => {
-      const entityID = req.session.entityID;
-      const uid = req.body.RelayState;
-      const {extract} = await sp.parseLoginResponse(idps[entityID!], 'post', req);
-      req.session.accountId = extract.nameID;
-      return res.send(postBack(Account({endpoint: redirect(uid)})));
+      //const entityID = req.session.entityID;
+      //const uid = req.body.RelayState;
+      //const {extract} = await sp.parseLoginResponse(idps[entityID!], 'post', req);
+      //req.session.accountId = extract.nameID;
+      //return res.send(postBack(Account({endpoint: redirect(uid)})));
     });
 
     router.get('/metadata', (req, res) => {
