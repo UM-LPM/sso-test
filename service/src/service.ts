@@ -39,7 +39,7 @@ const sp: saml.SamlConfig = {
   issuer: `${endpoint}/prov/aai/metadata`,
   callbackUrl: `${endpoint}/prov/aai/acs`,
   privateKey: fs.readFileSync(spCertificateKey).toString(),
-  signMetadata: true,
+  //signMetadata: true,
   disableRequestAcsUrl: true,
   cert: [] // HACK: Dummy value, IDP cert is not needed for generation of metadata
 };

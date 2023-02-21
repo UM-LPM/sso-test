@@ -30,11 +30,6 @@ export default (displayName: string, disco: SamlDiscovery, idps: {[index: string
   async redirect(uid: string, entityID: string) {
     const s = new saml.SAML({...sp, ...idps[entityID]});
     return s.getAuthorizeUrlAsync(uid, undefined, {});
-
-    //const {id, context} = await sp.createLoginRequest(idps[entityID], 'redirect'); 
-    //const url = new URL(context);
-    //url.searchParams.append('RelayState', uid);
-    //return url.toString()
   },
 
   router(redirect: (uid: string) => string) {
