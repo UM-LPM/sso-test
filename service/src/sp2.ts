@@ -19,33 +19,28 @@ export default (displayName: string, discoveryLocation: string, idps: {[index: s
 
   displayName,
 
-  async redirect(entityID: string) {
+  async discovery() {
     const url = new URL(discoveryLocation);
-    url.search = new URLSearchParams({entityID: sp.issuer, return: `https://sso-test.lpm.feri.um.si/prov/aai/disco`}).toString()
-    const res = await fetch(url.toString(), {redirect: 'manual'});
-    if (!res.redirected) {
-      throw new Error("Unsuccessful discovery!");
-    }
-    console.error(res.headers.get('location'));
+    url.search = new URLSearchParams({entityID: sp.issuer, return: `https://sso-test.lpm.feri.um.si/prov/aai/disco`}).toString();
+    return Promise.resolve(url.toString());
+  },
 
-    return "";
-
-
+  async redirect() {
     //const {id, context} = await sp.createLoginRequest(idps[entityID], 'redirect'); 
     //const url = new URL(context);
     //url.searchParams.append('RelayState', uid);
     //return url.toString()
+    return Promise.resolve("");
   },
 
   router(redirect: (uid: string) => string) {
     const router = express.Router();
 
-    // Dummy path, not intended to be called, the redirect is intercepted and never makes it to the user-agent.
-    router.get('/disco', async (req, res) => {});
-
-      //const uid = req.query.uid as string;
-      //req.session.entityID = req.query.entityID as string;
-      //return res.send(postBack(Account({endpoint: redirect(uid)})));
+    router.get('/disco', async (req, res) => {
+      const uid = req.query.uid as string;
+      req.session.entityID = req.query.entityID as string;
+      return res.send(postBack(Account({endpoint: redirect(uid)})));
+    });
 
     router.post('/acs', formParser, async (req, res) => {
       //const entityID = req.session.entityID;
