@@ -139,7 +139,7 @@ let entries = await metadataParser(res.body!);
 for (const entity of entries) {
   idps[entity.entityID] = { // XXX: Not the best fix
     entryPoint: entity.idp?.SingleSignOnService!.Location,
-    cert: (entity.idp?.certificates.filter((cert) => cert.use === "signing"))
+    cert: (entity.idp?.certificates.filter((cert) => cert.use === "signing"))!.map((cert) => cert.data)
   };
 }
 
