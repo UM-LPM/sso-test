@@ -9,28 +9,32 @@ import Account from './views/account.js';
 import postBack from './views/post-back.js';
 import fetch from 'node-fetch';
 
-import {LoginProvider} from './types.js';
+import {LoginProvider, SamlDiscovery} from './types.js';
 
 //saml.setSchemaValidator(validator);
 
 const formParser = bodyParser.urlencoded({extended: false});
 
-export default (displayName: string, discoveryLocation: string, idps: {[index: string]: any}, sp: any, metadata: string) => ({
+export default (displayName: string, disco: SamlDiscovery, idps: {[index: string]: any}, sp: any, metadata: string) => ({
 
   displayName,
 
-  async discovery() {
-    const url = new URL(discoveryLocation);
-    url.search = new URLSearchParams({entityID: sp.issuer, return: `https://sso-test.lpm.feri.um.si/prov/aai/disco`}).toString();
-    return Promise.resolve(url.toString());
+  discovery(uid: string) {
+    const cb = new URL(disco.callbackUrl)
+    cb.search = new URLSearchParams({uid}).toString()
+    const ep = new URL(disco.entryPoint);
+    ep.search = new URLSearchParams({entityID: sp.issuer, return: cb.toString()}).toString();
+    return Promise.resolve(ep.toString());
   },
 
-  async redirect() {
+  async redirect(uid: string, entityID: string) {
+    const s = new saml.SAML({...sp, ...idps[entityID]});
+    return s.getAuthorizeUrlAsync(uid, undefined, {});
+
     //const {id, context} = await sp.createLoginRequest(idps[entityID], 'redirect'); 
     //const url = new URL(context);
     //url.searchParams.append('RelayState', uid);
     //return url.toString()
-    return Promise.resolve("");
   },
 
   router(redirect: (uid: string) => string) {

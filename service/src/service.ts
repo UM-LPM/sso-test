@@ -15,6 +15,7 @@ import oidcRouter from './login.js';
 import samlLoginProvider from './sp2.js';
 import idpRouter from './idp.js';
 import metadataParser from './metadata.js';
+import {SamlDiscovery} from './types.js';
 
 function env(name: string): string {
     class Missing extends Error {}
@@ -42,6 +43,11 @@ const sp: saml.SamlConfig = {
   disableRequestAcsUrl: true,
   cert: [] // HACK: Dummy value, IDP cert is not needed for generation of metadata
 };
+
+const disco: SamlDiscovery = {
+  entryPoint: 'https://ds.aai.arnes.si/simplesaml/saml2/sp/idpdisco.php',
+  callbackUrl: `${endpoint}/prov/aai/disco`,
+}
 
 //const sp = saml.ServiceProvider({
 //  entityID: `${endpoint}/prov/aai/metadata`,
@@ -132,14 +138,13 @@ let entries = await metadataParser(res.body!);
 
 for (const entity of entries) {
   idps[entity.entityID] = { // XXX: Not the best fix
-    ...sp,
     entryPoint: entity.idp?.SingleSignOnService!.Location,
     cert: (entity.idp?.certificates.filter((cert) => cert.use === "signing"))
   };
 }
 
 app.use(oidcRouter(oidc, {
-  'aai': samlLoginProvider('ArnesAAI', 'https://ds.aai.arnes.si/simplesaml/saml2/sp/idpdisco.php', idps, sp, new saml.SAML(sp).generateServiceProviderMetadata(null, signingCerts))
+  'aai': samlLoginProvider('ArnesAAI', disco, idps, sp, new saml.SAML(sp).generateServiceProviderMetadata(null, signingCerts))
 }));
 
 app.listen(port);

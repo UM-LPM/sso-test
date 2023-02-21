@@ -127,10 +127,10 @@ export default (oidc: Provider, provs: {[name: string]: LoginProvider}) => {
       const {uid, prompt, params} = interactionDetails;
 
       if (req.session.entityID === undefined) {
-        const url =  await provs["aai"].discovery();
+        const url =  await provs["aai"].discovery(uid);
         return res.redirect(303, url);
       } else if (req.session.accountId === undefined) {
-        const url =  await provs["aai"].redirect();
+        const url =  await provs["aai"].redirect(uid, req.session.entityID);
         return res.redirect(303, url);
       } else {
         const result = {
