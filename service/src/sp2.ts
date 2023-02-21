@@ -47,11 +47,14 @@ export default (displayName: string, disco: SamlDiscovery, idps: {[index: string
     });
 
     router.post('/acs', formParser, async (req, res) => {
-      //const entityID = req.session.entityID;
-      //const uid = req.body.RelayState;
-      //const {extract} = await sp.parseLoginResponse(idps[entityID!], 'post', req);
-      //req.session.accountId = extract.nameID;
-      //return res.send(postBack(Account({endpoint: redirect(uid)})));
+      const entityID = req.session.entityID!;
+      const uid = req.body.RelayState;
+
+      const s = new saml.SAML({...sp, ...idps[entityID]});
+      const {profile} = await s.validatePostResponseAsync(req.body);
+
+      req.session.accountId = profile!.nameID;
+      return res.send(postBack(Account({endpoint: redirect(uid)})));
     });
 
     router.get('/metadata', (req, res) => {
