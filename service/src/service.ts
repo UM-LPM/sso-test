@@ -136,6 +136,7 @@ const idps: {[index: string]: any} = {}
 const res = await fetch('https://ds.aai.arnes.si/metadata/aai.arnes.si.sha256.xml');
 let entries = await metadataParser(res.body!);
 
+/*
 for (const entity of entries) {
   idps[entity.entityID] = { // XXX: Not the best fix
     entryPoint: entity.idp?.SingleSignOnService!.Location,
@@ -148,3 +149,4 @@ app.use(oidcRouter(oidc, {
 }));
 
 app.listen(port);
+*/
