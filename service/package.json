@@ -21,7 +21,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "samlify": "^2.8.7",
-    "sax": "^1.2.4"
+    "sax": "^1.2.4",
+    "saxes": "^6.0.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.3",
@@ -35,7 +36,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node build/service.js",
-    "test": "node --trace-uncaught --test build/test/index.js"
+    "test": "node build/test/index.js"
   },
   "name": "service",
   "bin": {

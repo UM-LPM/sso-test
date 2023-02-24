@@ -1,5 +1,6 @@
-import {Stream} from 'node:stream';
-import sax from 'sax';
+import {Stream, Readable} from 'node:stream';
+import util from 'node:util';
+import sax from 'saxes';
 
 // An incomplete implementation of the SAML metadata schema
 
@@ -17,7 +18,7 @@ import sax from 'sax';
 //         </extension>
 //     </simpleContent>
 // </complexType>
-type Localized = {[lang: string]: string}
+type Localized = {lang: string; content: string};
 
 // <complexType name="EndpointType">
 //     <sequence>
@@ -29,9 +30,9 @@ type Localized = {[lang: string]: string}
 //     <anyAttribute namespace="##other" processContents="lax"/>
 // </complexType>
 interface Endpoint {
-  binding: string
-  location: string
-  responseLocation?: string
+  binding: string;
+  location: string;
+  responseLocation?: string;
 }
     
 // <complexType name="IndexedEndpointType">
@@ -43,8 +44,8 @@ interface Endpoint {
 //     </complexContent>
 // </complexType>
 interface IndexedEndpoint extends Endpoint {
-  index: number
-  isDefault?: boolean
+  index: number;
+  isDefault?: boolean;
 }
 
 // <complexType name="KeyDescriptorType">
@@ -61,12 +62,12 @@ interface IndexedEndpoint extends Endpoint {
 //     </restriction>
 // </simpleType>
 // <element name="EncryptionMethod" type="xenc:EncryptionMethodType"/>
-type KeyTypes = 'encryption' | 'signing';
+type KeyType = 'encryption' | 'signing';
 interface Key {
-  info: string
+  certificates: string[];
   // EncryptionMethod
 
-  use?: KeyTypes
+  use?: KeyType
 }
 
 // <complexType name="EntitiesDescriptorType">
@@ -88,10 +89,10 @@ interface EntitiesDescriptor {
   // Extensions
   entities: (EntityDescriptor | EntitiesDescriptor)[], // required
 
-  validUntil?: string // Date
-  cacheDuration?: string // Duration
+  validUntil?: string; // Date
+  cacheDuration?: string; // Duration
   // ID
-  name?: string
+  name?: string;
 }
 
 // <complexType name="EntityDescriptorType">
@@ -120,7 +121,7 @@ interface EntitiesDescriptor {
 //     <anyAttribute namespace="##other" processContents="lax"/>
 // </complexType>
 interface EntityDescriptor {
-    entityID: string
+    entityID: string;
     // validUntil
     // cacheDuration
     // ID
@@ -132,9 +133,9 @@ interface EntityDescriptor {
     // AttributeAuthorityDescriptor
     // PDPDescriptor
     // AffiliationDescriptor
-    idps: IDPSSO[]
-    sps: SPSSO[]
-    organization?: Organization
+    idps: IDPSSO[];
+    sps: SPSSO[];
+    organization?: Organization;
     // ContactPerson
     // AdditionalMetadataLocation
 }
@@ -153,9 +154,9 @@ interface EntityDescriptor {
 // <element name="OrganizationURL" type="md:localizedURIType"/>
 interface Organization {
   // Extensions
-  organizationName: Localized
-  organizationDisplayName: Localized
-  organizationURL: Localized
+  organizationName: Localized[];
+  organizationDisplayName: Localized[];
+  organizationURL: Localized[];
 }
 
 // <complexType name="RoleDescriptorType" abstract="true">
@@ -176,14 +177,14 @@ interface Organization {
 interface Role {
     // Signature
     // Extensions
-    key: Key
-    organization?: Organization
+    keys: Key[];
+    organization?: Organization;
     // ContactPerson
 
     // ID
     // validUntil
     // cacheDuration
-    protocolSupportEnumeration: string[]
+    protocolSupportEnumeration: string[];
     // errorURL
 }
 
@@ -205,9 +206,9 @@ interface Role {
 // <element name="NameIDFormat" type="anyURI"/>
 interface SSO extends Role {
   // ArtifactResolutionService
-  singleLogoutServices: Endpoint[]
+  singleLogoutServices: Endpoint[];
   // ManageNameIDService
-  nameIDFormat: string
+  nameIDFormats: string[];
 }
 
 // <complexType name="IDPSSODescriptorType">
@@ -229,13 +230,13 @@ interface SSO extends Role {
 // <element name="AssertionIDRequestService" type="md:EndpointType"/>
 // <element name="AttributeProfile" type="anyURI"/>
 interface IDPSSO extends SSO {
-  singleSignOnServices: Endpoint[] // required
+  singleSignOnServices: Endpoint[]; // required
   // NameIDMappingService
   // AssertionIDRequestService
   // AttributeProfile
   // Attribute
 
-  wantAuthnRequestsSigned?: boolean
+  wantAuthnRequestsSigned?: boolean;
 }
 
 // <complexType name="SPSSODescriptorType">
@@ -272,11 +273,11 @@ interface IDPSSO extends SSO {
 //     </complexContent>
 // </complexType>
 interface SPSSO extends SSO {
-  assertionConsumerServices: IndexedEndpoint[], // required
+  assertionConsumerServices: IndexedEndpoint[]; // required
   // AttributeConsumingService
 
-  authnRequestsSigned?: boolean
-  wantAssertionsSigned?: boolean
+  authnRequestsSigned?: boolean;
+  wantAssertionsSigned?: boolean;
 }
 
 type Metadata = EntityDescriptor | EntitiesDescriptor
@@ -307,357 +308,432 @@ function parseEnumeration(s: string): string[] {
   return s.split(' ');
 }
 
-type Tag = 
-  | 'EntitiesDescriptor' 
-  | 'EntityDescriptor'
-  | 'SPSSODescriptor'
-  | 'IDPSSODescriptor'
-  | 'Organization'
-  | 'OrganizationName'
-  | 'OrganizationDisplayName'
-  | 'OrganizationURL'
-  | 'KeyDescriptor'
-  | 'KeyInfo'
-  | 'X509Data'
-  | 'X509Certificate'
-  | 'SingleSignOnService' 
-  | 'SingleLogoutService'
-  | 'AssertionConsumerService'
-  | 'NameIDFormat'
-
-
-type Element = {tag: Tag, components: any}
-
-interface PathMatcher {
-  match(top: Element[], k: (top_: Element[]) => boolean): boolean
-}
-
-class And implements PathMatcher {
-  left: PathMatcher
-  right: PathMatcher
-  constructor(left: PathMatcher, right: PathMatcher) {
-    this.left = left;
-    this.right = right;
+namespace Path {
+  export interface Matcher {
+    match(top: string[], k: (top_: string[]) => boolean): boolean
   }
 
-  match(top: Element[], k: (top_: Element[]) => boolean): boolean {
-    return this.right.match(top, (top_) => this.left.match(top_, k)) // Match in reverse
-  }
-}
+  class And implements Matcher {
+    left: Matcher;
+    right: Matcher;
 
-class Or implements PathMatcher {
-  ms: PathMatcher[]
-  constructor(ms: PathMatcher[]) {
-    this.ms = ms;
-  }
+    constructor(left: Matcher, right: Matcher) {
+      this.left = left;
+      this.right = right;
+    }
 
-  match(top: Element[], k: (top_: Element[]) => boolean): boolean {
-    return this.ms.some((m) => m.match(top, k));
-  }
-}
-
-class Seg implements PathMatcher {
-  tag: Tag
-  constructor(tag: Tag) {
-    this.tag = tag;
+    match(top: string[], k: (top_: string[]) => boolean): boolean {
+      return this.right.match(top, (top_) => this.left.match(top_, k)); // Match in reverse
+    }
   }
 
-  match(top: Element[], k: (top_: Element[]) => boolean): boolean {
-    if (top.length > 0) {
-      return top[top.length - 1].tag === this.tag && k(top.slice(0, -1))
-    } else {
-      return false;
+  class Or implements Matcher {
+    ms: Matcher[];
+
+    constructor(ms: Matcher[]) {
+      this.ms = ms;
+    }
+
+    match(top: string[], k: (top_: string[]) => boolean): boolean {
+      return this.ms.some((m) => m.match(top, k));
+    }
+  }
+
+  class Repeat implements Matcher {
+    m: Matcher;
+
+    constructor(m: Matcher) {
+      this.m = m; 
+    }
+
+    matchRepeatedly(top: string[], k: (top_: string[]) => boolean): boolean {
+      return k(top) || this.m.match(top, (top_) => top !== top_ && this.matchRepeatedly(top_, k));
+    }
+
+    match(top: string[], k: (top_: string[]) => boolean): boolean {
+      return this.matchRepeatedly(top, k);
+    }
+  }
+
+  class Tag implements Matcher {
+    tag: string;
+
+    constructor(tag: string) {
+      this.tag = tag;
+    }
+
+    match(top: string[], k: (top_: string[]) => boolean): boolean {
+      return top.length === 0 
+        ? false 
+        : top[top.length - 1] === this.tag && k(top.slice(0, -1));
+    }
+  }
+
+  class Root implements Matcher {
+    match(top: string[], k: (top_: string[]) => boolean): boolean {
+      return top.length === 0;
+    }
+  }
+
+  export function or(ms: Matcher[]) {
+    return new Or(ms);
+  }
+
+  export function and(left: Matcher, right: Matcher) {
+    return new And(left, right);
+  }
+
+  export function tag(tag: string) {
+    return new Tag(tag);
+  }
+
+  export function repeat(m: Matcher) {
+    return new Repeat(m);
+  }
+
+  export const root = new Root();
+
+  export class Stack {
+    tags: string[] = [];
+
+    push(tag: string) {
+      this.tags.push(tag);
+    }
+
+    pop(tag_: string): string {
+      const tag = this.tags.pop();
+      if (tag === undefined) {
+        throw Error('Stack empty'); 
+      }
+      if (tag !== tag_) {
+        throw Error(`Unexpected tag ${tag}`); 
+      }
+      return tag;
+    }
+
+    match(m: Matcher): boolean {
+      return m.match(this.tags, (_) => true);
     }
   }
 }
 
-class One implements PathMatcher {
-  match(top: Element[], k: (top_: Element[]) => boolean): boolean {
-    return k(top)
-  }
-}
+import p = Path
 
-function or(ms: PathMatcher[]) {
-  return new Or(ms)
-}
+export default async function(stream: Readable): Promise<Metadata | undefined> {
 
-function and(left: PathMatcher, right: PathMatcher) {
-  return new And(left, right)
-}
+  const parser = new sax.SaxesParser({xmlns: true});
 
-function seg(tag: Tag) {
-  return new Seg(tag)
-}
-
-const one = new One();
-
-class Stack {
-  data: Element[] = []
-
-  push(tag: Tag, components: any) {
-    this.data.push({tag, components});
-  }
-
-  pop(tag: Tag): any {
-    const element = this.data.pop();
-    if (element === undefined) {
-      throw Error("Stack empty"); 
-    }
-    if (element.tag !== tag) {
-      console.log(this.data)
-      throw Error(`Unexpected tag ${tag}`); 
-    }
-    return element.components
-  }
-
-  get focus() {
-    return this.data[this.data.length - 1].components
-  }
-
-  match(m: PathMatcher): boolean {
-    return m.match(this.data, (_) => true)
-  }
-}
-
-export default async function(stream: Stream): Promise<Metadata | undefined> {
-  const parser = sax.createStream(true, {xmlns: true});
-
-
-  const stack: Stack = new Stack()
+  const tags: p.Stack = new p.Stack()
   let metadata: Metadata | undefined
-  let atKeyInfo: boolean = false
-  let atX509Data: boolean = false
-  let atX509Certificate: boolean = false
+  let ns: {[key: string]: string} 
 
-  parser.on('opentag', (tag: sax.QualifiedTag) => {
+  const EntitiesDescriptorStack: EntitiesDescriptor[] = []
+  let EntityDescriptor: EntityDescriptor | undefined
+  let SPSSODescriptor: SPSSO | undefined
+  let IDPSSODescriptor: IDPSSO | undefined
+  let Organization: Organization | undefined
+  let OrganizationName: Localized | undefined
+  let OrganizationDisplayName: Localized | undefined
+  let OrganizationURL: Localized | undefined
+  let KeyDescriptor: Key | undefined
+  let SingleSignOnService: Endpoint | undefined
+  let SingleLogoutService: Endpoint | undefined
+  let AssertionConsumerService: IndexedEndpoint | undefined
+  let NameIDFormat: String | undefined
+  let KeyInfo: boolean = false
+  let X509Data: boolean = false
+  let X509Certificate: boolean = false
+
+  parser.on('opentag', (tag) => {
     function a(name: string): string {
       const attribute = tag.attributes[name]
       return attribute && attribute.value
     }
 
-    switch (tag.ns[tag.prefix]) {
+    ns = {...ns, ...tag.ns};
+
+    switch (ns[tag.prefix]) {
       case 'urn:oasis:names:tc:SAML:2.0:metadata':
         switch (tag.local) {
           case 'EntitiesDescriptor':
-            stack.push(tag.local, {
-              entities: [],
-              validUntil: a('validUntil'),
-              cacheDuration: a('cacheDuration'),
-              name: a('Name')
-            });
-            return;
+            if (tags.match(p.and(p.root, p.repeat(p.tag('EntitiesDescriptor'))))) { 
+              EntitiesDescriptorStack.push({
+                entities: [],
+                validUntil: a('validUntil'),
+                cacheDuration: a('cacheDuration'),
+                name: a('Name')
+              });
+            }
+            break;
           case 'EntityDescriptor':
-            stack.push(tag.local, {
-              entityID: a('entityID'),
-              idps: [],
-              sps: [],
-            });
-            return;
+            if (tags.match(p.and(p.root, p.repeat(p.tag('EntitiesDescriptor'))))) { 
+              EntityDescriptor = {
+                entityID: a('entityID'),
+                idps: [],
+                sps: [],
+              };
+            }
+            break;
           case 'IDPSSODescriptor':
-            stack.push(tag.local, {
-               wantAuthnRequestsSigned: parseBoolean(a('WantAuthnRequestsSigned')),
-               protocolSupportEnumeration: parseEnumeration(a('protocolSupportEnumeration')),
-               singleLogoutServices: [],
-               singleSignOnServices: []
-            });
-            return;
+            if (tags.match(p.tag('EntityDescriptor'))) {
+              IDPSSODescriptor = {
+                keys: [],
+                wantAuthnRequestsSigned: parseBoolean(a('WantAuthnRequestsSigned')),
+                protocolSupportEnumeration: parseEnumeration(a('protocolSupportEnumeration')),
+                singleLogoutServices: [],
+                singleSignOnServices: [],
+                nameIDFormats: [],
+              };
+            }
+            break;
           case 'SPSSODescriptor':
-            stack.push(tag.local, {
-               authnRequestsSigned: parseBoolean(a('AuthnRequestsSigned')),
-               wantAssertionsSigned: parseBoolean(a('WantAssertionsSigned')),
-               protocolSupportEnumeration: parseEnumeration(a('protocolSupportEnumeration')),
-               singleLogoutServices: [],
-               assertionConsumerServices: []
-            });
-            return;
-          case 'SingleSignOnService':
+            if (tags.match(p.tag('EntityDescriptor'))) {
+              SPSSODescriptor = {
+                keys: [],
+                authnRequestsSigned: parseBoolean(a('AuthnRequestsSigned')),
+                wantAssertionsSigned: parseBoolean(a('WantAssertionsSigned')),
+                protocolSupportEnumeration: parseEnumeration(a('protocolSupportEnumeration')),
+                singleLogoutServices: [],
+                assertionConsumerServices: [],
+                nameIDFormats: [],
+              };
+            }
+            break;
           case 'SingleLogoutService':
-            stack.push(tag.local, {
-               binding: a('Binding'),
-               location: a('Location'),
-               responseLocation: a('ResponseLocation')
-            });
-            return;
+            if (tags.match(p.or([p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
+              SingleLogoutService = {
+                binding: a('Binding'),
+                location: a('Location'),
+                responseLocation: a('ResponseLocation')
+              };
+            }
+            break;
+          case 'SingleSignOnService':
+            if (tags.match(p.tag('IDPSSODescriptor'))) {
+              SingleSignOnService = {
+                binding: a('Binding'),
+                location: a('Location'),
+                responseLocation: a('ResponseLocation')
+              };
+            }
+            break;
           case 'AssertionConsumerService':
-            stack.push(tag.local, {
-               binding: a('Binding'),
-               location: a('Location'),
-               responseLocation: a('ResponseLocation'),
-               index: parseInteger(a('index')),
-               isDefault: parseBoolean(a('isDefault'))
-            });
-            return;
+            if (tags.match(p.tag('SPSSODescriptor'))) {
+              AssertionConsumerService = {
+                 binding: a('Binding'),
+                 location: a('Location'),
+                 responseLocation: a('ResponseLocation'),
+                 index: parseInteger(a('index'))!,
+                 isDefault: parseBoolean(a('isDefault'))
+              };
+            }
+            break;
           case 'KeyDescriptor':
-            stack.push(tag.local, {
-              use: parseUse(a('use'))
-            })
-            return;
+            if (tags.match(p.or([p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
+              KeyDescriptor = {
+                use: parseUse(a('use')),
+                certificates: []
+              };
+            }
+            break;
           case 'Organization':
-            stack.push(tag.local, {
-              organizationName: {},
-              organizationDisplayName: {},
-              organizationURL: {},
-            });
-            return;
+            if (tags.match(p.or([p.tag('EntityDescriptor'), p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
+              Organization = {
+                organizationName: [],
+                organizationDisplayName: [],
+                organizationURL: [],
+              };
+            }
+            break;
           case 'OrganizationName':
+            if (tags.match(p.tag('Organization'))) {
+              OrganizationName = {
+                lang: a('xml:lang')!,
+                content: ''
+              };
+            }
+            break;
           case 'OrganizationDisplayName':
+            if (tags.match(p.tag('Organization'))) {
+              OrganizationDisplayName = {
+                lang: a('xml:lang')!,
+                content: ''
+              };
+            }
+            break;
           case 'OrganizationURL':
-            stack.push(tag.local, {
-              lang: parseUse(a('lang'))
-            })
-            return;
+            if (tags.match(p.tag('Organization'))) {
+              OrganizationURL = {
+                lang: a('xml:lang')!,
+                content: ''
+              };
+            }
+            break;
           case 'NameIDFormat':
-            stack.push(tag.local, {});
-            return;
+            if (tags.match(p.or([p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
+              NameIDFormat = new String('');
+            }
+            break;
         }
         break;
       case "http://www.w3.org/2000/09/xmldsig#":
         switch (tag.local) {
           case 'KeyInfo':
-            atKeyInfo = true;
-            return;
+            if (tags.match(p.tag('KeyDescriptor'))) {
+              KeyInfo = true;
+            }
+            break;
           case 'X509Data':
-            atX509Data = true;
-            return;
+            if (tags.match(p.tag('KeyInfo'))) {
+              X509Data = true;
+            }
+            break;
           case 'X509Certificate':
-            atX509Certificate = true;
-            return;
+            if (tags.match(p.tag('X509Data'))) {
+              X509Certificate = true;
+            }
+            break;
         }
+        break;
     }
+
+    tags.push(tag.local);
   });
 
   parser.on('text', (text: string) => {
-    if (stack.match(new Seg('KeyDescriptor')) && atKeyInfo && atX509Data && atX509Certificate) {
-      stack.focus.info = text;
-    } else if (stack.match(or([
-      and(or([seg('IDPSSODescriptor'), seg('SPSSODescriptor')]), seg('NameIDFormat')),
-      and(seg('Organization'), seg('OrganizationName')),
-      and(seg('Organization'), seg('OrganizationDisplayName')),
-      and(seg('Organization'), seg('OrganizationURL'))
-    ]))) {
-      stack.focus.text = text;
+    if (KeyDescriptor && KeyInfo && X509Data && X509Certificate) {
+      KeyDescriptor.certificates.push(text);
+    } else if (NameIDFormat) {
+      NameIDFormat = text;
+    } else if (OrganizationName) {
+      OrganizationName.content = text;
+    } else if (OrganizationDisplayName) {
+      OrganizationDisplayName.content = text;
+    } else if (OrganizationURL) {
+      OrganizationURL.content = text;
     }
   });
 
-  parser.on('closetag', (name: string) => {
-    const ext = /(?:\w+:)?(\w+)/.exec(name);
-    if (ext === null) {
-      throw Error("Malformed XML closing tag")
+  parser.on('closetag', (tag) => {
+    switch (ns[tag.prefix]) {
+      case 'urn:oasis:names:tc:SAML:2.0:metadata':
+        switch (tag.local) {
+          case 'EntitiesDescriptor': {
+            const EntitiesDescriptor = EntitiesDescriptorStack.pop(); 
+            if (EntitiesDescriptorStack.length === 0) {
+              metadata = EntitiesDescriptor
+            } else {
+              EntitiesDescriptorStack[EntitiesDescriptorStack.length - 1].entities.push(EntitiesDescriptor!);
+            }
+            break;
+          } case 'EntityDescriptor':
+            if (EntityDescriptor) {
+              if (EntitiesDescriptorStack.length === 0) {
+                metadata = EntityDescriptor
+              } else {
+                EntitiesDescriptorStack[EntitiesDescriptorStack.length - 1].entities.push(EntityDescriptor);
+              }
+            }
+            EntityDescriptor = undefined;
+            break;
+          case 'IDPSSODescriptor':
+            if (IDPSSODescriptor) {
+              EntityDescriptor!.idps.push(IDPSSODescriptor);
+            }
+            IDPSSODescriptor = undefined;
+            break;
+          case 'SPSSODescriptor':
+            if (SPSSODescriptor) {
+              EntityDescriptor!.sps.push(SPSSODescriptor);
+            }
+            SPSSODescriptor = undefined;
+            break;
+          case 'SingleLogoutService': {
+            const x = IDPSSODescriptor || SPSSODescriptor;
+            if (SingleLogoutService) {
+              x!.singleLogoutServices.push(SingleLogoutService);
+            }
+            SingleLogoutService = undefined;
+            break;
+          } case 'SingleSignOnService':
+            if (SingleSignOnService) {
+              IDPSSODescriptor!.singleSignOnServices.push(SingleSignOnService);
+            }
+            SingleSignOnService = undefined;
+            break;
+          case 'AssertionConsumerService':
+            if (AssertionConsumerService) {
+              SPSSODescriptor!.assertionConsumerServices.push(AssertionConsumerService);
+            }
+            AssertionConsumerService = undefined;
+            break;
+          case 'KeyDescriptor': {
+            const x = IDPSSODescriptor || SPSSODescriptor;
+            if (KeyDescriptor) {
+              x!.keys.push(KeyDescriptor);
+            }
+            KeyDescriptor = undefined;
+            break;
+          } case 'Organization': {
+            const x = EntityDescriptor || IDPSSODescriptor || SPSSODescriptor;
+            if (Organization) {
+              x!.organization = Organization;
+            }
+            Organization = undefined;
+            break;
+          } case 'OrganizationName':
+            if (OrganizationName) {
+              Organization!.organizationName.push(OrganizationName);
+            }
+            OrganizationName = undefined;
+            break;
+          case 'OrganizationDisplayName':
+            if (OrganizationDisplayName) {
+              Organization!.organizationDisplayName.push(OrganizationDisplayName);
+            }
+            OrganizationDisplayName = undefined;
+            break;
+          case 'OrganizationURL':
+            if (OrganizationURL) {
+              Organization!.organizationURL.push(OrganizationURL);
+            }
+            OrganizationURL = undefined;
+            break;
+          case 'NameIDFormat': {
+            const x = IDPSSODescriptor || SPSSODescriptor;
+            if (NameIDFormat) {
+              x!.nameIDFormats.push(NameIDFormat.valueOf());
+            }
+            NameIDFormat = undefined;
+            break;
+          }
+        }
+        break;
+      case "http://www.w3.org/2000/09/xmldsig#":
+        switch (tag.local) {
+          case 'KeyInfo':
+            KeyInfo = false;
+            break;
+          case 'X509Data':
+            X509Data = false;
+            break;
+          case 'X509Certificate':
+            X509Certificate = false;
+            break;
+        }
+        break;
     }
-    const local = ext[1]
-    switch (local) {
-      case 'EntitiesDescriptor': {
-        const x = stack.pop(local);
-        if (stack.match(seg('EntitiesDescriptor'))) {
-          stack.focus.entities.push(x);
-        } else {
-          metadata = x;
-        }
-        return;
-      } case 'EntityDescriptor': {
-        const x = stack.pop(local);
-        if (stack.match(seg('EntitiesDescriptor'))) {
-          stack.focus.entities.push(x);
-        } else {
-          metadata = x;
-        }
-        return;
-      } case 'IDPSSODescriptor': {
-        const x = stack.pop(local);
-        if (stack.match(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')))) {
-          stack.focus.idps.push(x);
-        }
-        return;
-      } case 'SPSSODescriptor': {
-        const x = stack.pop(local);
-        if (stack.match(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')))) {
-          stack.focus.sps.push(x);
-        }
-        return;
-      } case 'SingleLogoutService': {
-        const x = stack.pop(local);
-        if (stack.match(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')),
-                            or([seg('IDPSSODescriptor'), seg('SPSSODescriptor')])))) {
-          stack.focus.singleLogoutServices.push(x);
-        }
-        return;
-      } case 'SingleSignOnService': {
-        const x = stack.pop(local);
-        if (stack.match(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                            seg('IDPSSODescriptor')))) {
-          stack.focus.singleSignOnServices.push(x);
-        }
-        return;
-      } case 'AssertionConsumerService': {
-        const x = stack.pop(local);
-        if (stack.match(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                            seg('SPSSODescriptor')))) {
-          stack.focus.assertionConsumerServices.push(x);
-        }
-        return;
-      } case 'KeyDescriptor': {
-        const x = stack.pop(local);
-        if (stack.match(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                            or([seg('IDPSSODescriptor'), seg('SPSSODescriptor')])))) {
-          stack.focus.key = x;
-        }
-        return;
-      } case 'Organization': {
-        const x = stack.pop(local);
-        if (stack.match(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                            or([one, seg('IDPSSODescriptor'), seg('SPSSODescriptor')])))) {
-          stack.focus.organization = x;
-        }
-        return;
-      } case 'NameIDFormat': {
-        const {text} = stack.pop(local);
-        if (stack.match(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                            or([seg('IDPSSODescriptor'), seg('SPSSODescriptor')])))) {
-          stack.focus.localIDFormat = text;
-        }
-        return;
-      } case 'OrganizationName': {
-        const {lang, text} = stack.pop(local);
-        if (stack.match(and(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                                or([one, seg('IDPSSODescriptor'), seg('SPSSODescriptor')])),
-                              seg('Organization')))) {
-          stack.focus.organizationName[lang] = text;
-        }
-        return;
-      } case 'OrganizationDisplayName': {
-        const {lang, text} = stack.pop(local);
-        if (stack.match(and(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                                or([one, seg('IDPSSODescriptor'), seg('SPSSODescriptor')])), 
-                              seg('Organization')))) {
-          stack.focus.organizationDisplayName[lang] = text;
-        }
-        return;
-      } case 'OrganizationURL': {
-        const {lang, text} = stack.pop(local);
-        if (stack.match(and(and(and(seg('EntitiesDescriptor'), seg('EntityDescriptor')), 
-                                or([one, seg('IDPSSODescriptor'), seg('SPSSODescriptor')])), 
-                              seg('Organization')))) {
-          stack.focus.organizationURL[lang] = text;
-        }
-        return;
-      }
-      case 'KeyInfo':
-        atKeyInfo = false;
-        return;
-      case 'X509Data':
-        atX509Data = false;
-        return;
-      case 'X509Certificate':
-        atX509Certificate = false;
-        return;
-    }
+    tags.pop(tag.local);
   });
-
   const end: Promise<Metadata | undefined> = new Promise((resolve, reject) => {
-    parser.on('end', () =>  { return resolve(metadata)});
+    parser.on('end', () =>  {return resolve(metadata)});
     parser.on('error', (e) => reject(e));
   });
 
-  stream.pipe(parser);
+  for await (const chunk of stream) {
+    parser.write(chunk);
+  }
+  parser.close();
+
   return await end;
 }

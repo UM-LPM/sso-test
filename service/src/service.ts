@@ -3,6 +3,7 @@
 
 import fs from 'node:fs';
 import https from 'node:https';
+import {Readable} from 'node:stream';
 import saml from "@node-saml/node-saml"
 
 import Provider from 'oidc-provider';
@@ -134,7 +135,7 @@ app.use(session({
 
 const idps: {[index: string]: any} = {}
 const res = await fetch('https://ds.aai.arnes.si/metadata/aai.arnes.si.sha256.xml');
-let entries = await metadataParser(res.body!);
+let entries = await metadataParser(new Readable().wrap(res.body!));
 
 /*
 for (const entity of entries) {
