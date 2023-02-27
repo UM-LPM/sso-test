@@ -20,6 +20,23 @@ import sax from 'saxes';
 // </complexType>
 type Localized = {lang: string; content: string};
 
+// <complexType name="AttributeType">
+//   <sequence>
+//     <element ref="saml:AttributeValue" minOccurs="0" maxOccurs="unbounded"/>
+//   </sequence>
+//   <attribute name="Name" type="string" use="required"/>
+//   <attribute name="NameFormat" type="anyURI" use="optional"/>
+//   <attribute name="FriendlyName" type="string" use="optional"/>
+//   <anyAttribute namespace="##other" processContents="lax"/>
+// </complexType>
+// <element name="AttributeValue" type="anyType" nillable="true"/>
+interface Attribute {
+  name: string; // required
+  nameFormat?: string;
+  friendlyName?: string;
+  values: string[]
+}
+
 // <complexType name="EndpointType">
 //     <sequence>
 //         <any namespace="##other" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
@@ -65,7 +82,7 @@ interface IndexedEndpoint extends Endpoint {
 type KeyType = 'encryption' | 'signing';
 interface Key {
   certificates: string[];
-  // EncryptionMethod
+  //EncryptionMethod
 
   use?: KeyType
 }
@@ -122,8 +139,8 @@ interface EntitiesDescriptor {
 // </complexType>
 interface EntityDescriptor {
     entityID: string;
-    // validUntil
-    // cacheDuration
+    validUntil?: string; // Date
+    cacheDuration?: string; // Duration
     // ID
 
     // Signature
@@ -182,10 +199,10 @@ interface Role {
     // ContactPerson
 
     // ID
-    // validUntil
-    // cacheDuration
+    validUntil?: string; // Date
+    cacheDuration?: string; // Duration
     protocolSupportEnumeration: string[];
-    // errorURL
+    errorURL?: string;
 }
 
 // <complexType name="SSODescriptorType" abstract="true">
@@ -208,7 +225,7 @@ interface SSO extends Role {
   // ArtifactResolutionService
   singleLogoutServices: Endpoint[];
   // ManageNameIDService
-  nameIDFormats: string[];
+  // NameIDFormat
 }
 
 // <complexType name="IDPSSODescriptorType">
@@ -239,6 +256,38 @@ interface IDPSSO extends SSO {
   wantAuthnRequestsSigned?: boolean;
 }
 
+// <complexType name="RequestedAttributeType">
+//     <complexContent>
+//         <extension base="saml:AttributeType">
+//             <attribute name="isRequired" type="boolean" use="optional"/>
+//         </extension>
+//     </complexContent>
+// </complexType>
+interface RequestedAttribute extends Attribute {
+  isRequired?: boolean;
+}
+
+// <complexType name="AttributeConsumingServiceType">
+//     <sequence>
+//         <element ref="md:ServiceName" maxOccurs="unbounded"/>
+//         <element ref="md:ServiceDescription" minOccurs="0" maxOccurs="unbounded"/>
+//         <element ref="md:RequestedAttribute" maxOccurs="unbounded"/>
+//     </sequence>
+//     <attribute name="index" type="unsignedShort" use="required"/>
+//     <attribute name="isDefault" type="boolean" use="optional"/>
+// </complexType>
+// <element name="ServiceName" type="md:localizedNameType"/>
+// <element name="ServiceDescription" type="md:localizedNameType"/>
+// <element name="RequestedAttribute" type="md:RequestedAttributeType"/>
+interface AttributeConsumingService {
+  serviceName: Localized[];
+  serviceDescription: Localized[];
+  requestedAttributes: RequestedAttribute[];
+
+  index: number;
+  isDefault?: boolean;
+}
+
 // <complexType name="SPSSODescriptorType">
 //     <complexContent>
 //         <extension base="md:SSODescriptorType">
@@ -253,28 +302,9 @@ interface IDPSSO extends SSO {
 // </complexType>
 // <element name="AssertionConsumerService" type="md:IndexedEndpointType"/>
 // <element name="AttributeConsumingService" type="md:AttributeConsumingServiceType"/>
-// <complexType name="AttributeConsumingServiceType">
-//     <sequence>
-//         <element ref="md:ServiceName" maxOccurs="unbounded"/>
-//         <element ref="md:ServiceDescription" minOccurs="0" maxOccurs="unbounded"/>
-//         <element ref="md:RequestedAttribute" maxOccurs="unbounded"/>
-//     </sequence>
-//     <attribute name="index" type="unsignedShort" use="required"/>
-//     <attribute name="isDefault" type="boolean" use="optional"/>
-// </complexType>
-// <element name="ServiceName" type="md:localizedNameType"/>
-// <element name="ServiceDescription" type="md:localizedNameType"/>
-// <element name="RequestedAttribute" type="md:RequestedAttributeType"/>
-// <complexType name="RequestedAttributeType">
-//     <complexContent>
-//         <extension base="saml:AttributeType">
-//             <attribute name="isRequired" type="boolean" use="optional"/>
-//         </extension>
-//     </complexContent>
-// </complexType>
 interface SPSSO extends SSO {
   assertionConsumerServices: IndexedEndpoint[]; // required
-  // AttributeConsumingService
+  attributeConsumingServices: AttributeConsumingService[];
 
   authnRequestsSigned?: boolean;
   wantAssertionsSigned?: boolean;
@@ -282,7 +312,7 @@ interface SPSSO extends SSO {
 
 type Metadata = EntityDescriptor | EntitiesDescriptor
     
-function parseBoolean(s: string): boolean | undefined {
+function parseBoolean(s: string | undefined): boolean | undefined {
   switch(s) {
     case 'true': return true;
     case 'false': return false;
@@ -290,12 +320,15 @@ function parseBoolean(s: string): boolean | undefined {
   }
 }
 
-function parseInteger(s: string): number | undefined {
+function parseInteger(s: string | undefined): number | undefined {
+  if (!s) {
+    return undefined;
+  }
   const n = parseInt(s, 10);
   return isNaN(n) ? undefined : n;
 }
 
-function parseUse(s: string): KeyType | undefined {
+function parseUse(s: string | undefined): KeyType | undefined {
   switch(s) {
     case 'encryption':
     case 'signing':
@@ -304,14 +337,38 @@ function parseUse(s: string): KeyType | undefined {
   }
 }
 
-function parseEnumeration(s: string): string[] {
+function parseEnumeration(s: string | undefined): string[] {
+  if (!s) {
+    return [];
+  }
   return s.split(' ');
 }
 
 namespace Path {
   export interface Matcher {
-    match(top: string[], k: (top_: string[]) => boolean): boolean
+    match(top: Tag[], k: (top_: Tag[]) => boolean): boolean
   }
+
+  class Tag implements Matcher {
+    ns: string | undefined;
+    local: string;
+
+    constructor(ns: string | undefined, local: string) {
+      this.ns = ns;
+      this.local = local;
+    }
+
+    equal(other: Tag) {
+      return this.ns === other.ns && this.local === other.local;
+    }
+
+    match(top: Tag[], k: (top_: Tag[]) => boolean): boolean {
+      return top.length === 0 
+        ? false 
+        : top[top.length - 1].equal(this) && k(top.slice(0, -1));
+    }
+  }
+
 
   class And implements Matcher {
     left: Matcher;
@@ -322,7 +379,7 @@ namespace Path {
       this.right = right;
     }
 
-    match(top: string[], k: (top_: string[]) => boolean): boolean {
+    match(top: Tag[], k: (top_: Tag[]) => boolean): boolean {
       return this.right.match(top, (top_) => this.left.match(top_, k)); // Match in reverse
     }
   }
@@ -334,7 +391,7 @@ namespace Path {
       this.ms = ms;
     }
 
-    match(top: string[], k: (top_: string[]) => boolean): boolean {
+    match(top: Tag[], k: (top_: Tag[]) => boolean): boolean {
       return this.ms.some((m) => m.match(top, k));
     }
   }
@@ -346,31 +403,23 @@ namespace Path {
       this.m = m; 
     }
 
-    matchRepeatedly(top: string[], k: (top_: string[]) => boolean): boolean {
+    matchRepeatedly(top: Tag[], k: (top_: Tag[]) => boolean): boolean {
       return k(top) || this.m.match(top, (top_) => top !== top_ && this.matchRepeatedly(top_, k));
     }
 
-    match(top: string[], k: (top_: string[]) => boolean): boolean {
+    match(top: Tag[], k: (top_: Tag[]) => boolean): boolean {
       return this.matchRepeatedly(top, k);
     }
   }
 
-  class Tag implements Matcher {
-    tag: string;
-
-    constructor(tag: string) {
-      this.tag = tag;
-    }
-
-    match(top: string[], k: (top_: string[]) => boolean): boolean {
-      return top.length === 0 
-        ? false 
-        : top[top.length - 1] === this.tag && k(top.slice(0, -1));
+  class Empty implements Matcher {
+    match(top: Tag[], k: (top_: Tag[]) => boolean): boolean {
+      return k(top);
     }
   }
 
   class Root implements Matcher {
-    match(top: string[], k: (top_: string[]) => boolean): boolean {
+    match(top: Tag[], k: (top_: Tag[]) => boolean): boolean {
       return top.length === 0;
     }
   }
@@ -383,8 +432,8 @@ namespace Path {
     return new And(left, right);
   }
 
-  export function tag(tag: string) {
-    return new Tag(tag);
+  export function tag(ns: string | undefined, tag: string) {
+    return new Tag(ns, tag);
   }
 
   export function repeat(m: Matcher) {
@@ -393,22 +442,23 @@ namespace Path {
 
   export const root = new Root();
 
-  export class Stack {
-    tags: string[] = [];
+  export const empty = new Empty();
 
-    push(tag: string) {
-      this.tags.push(tag);
+  export class Stack {
+    tags: Tag[] = [];
+
+    push(ns: string | undefined, local: string) {
+      this.tags.push(new Tag(ns, local));
     }
 
-    pop(tag_: string): string {
+    pop(ns_: string | undefined, local_: string) {
       const tag = this.tags.pop();
       if (tag === undefined) {
         throw Error('Stack empty'); 
       }
-      if (tag !== tag_) {
+      if (!tag.equal(new Tag(ns_, local_))) {
         throw Error(`Unexpected tag ${tag}`); 
       }
-      return tag;
     }
 
     match(m: Matcher): boolean {
@@ -423,121 +473,190 @@ export default async function(stream: Readable): Promise<Metadata | undefined> {
 
   const parser = new sax.SaxesParser({xmlns: true});
 
-  const tags: p.Stack = new p.Stack()
-  let metadata: Metadata | undefined
-  let ns: {[key: string]: string} 
+  const tags: p.Stack = new p.Stack();
+  let metadata: Metadata | undefined;
+  let nss: {[key: string]: string}[] = [];
 
-  const EntitiesDescriptorStack: EntitiesDescriptor[] = []
-  let EntityDescriptor: EntityDescriptor | undefined
-  let SPSSODescriptor: SPSSO | undefined
-  let IDPSSODescriptor: IDPSSO | undefined
-  let Organization: Organization | undefined
-  let OrganizationName: Localized | undefined
-  let OrganizationDisplayName: Localized | undefined
-  let OrganizationURL: Localized | undefined
-  let KeyDescriptor: Key | undefined
-  let SingleSignOnService: Endpoint | undefined
-  let SingleLogoutService: Endpoint | undefined
-  let AssertionConsumerService: IndexedEndpoint | undefined
-  let NameIDFormat: String | undefined
-  let KeyInfo: boolean = false
-  let X509Data: boolean = false
-  let X509Certificate: boolean = false
+  const EntitiesDescriptorStack: EntitiesDescriptor[] = [];
+  let EntityDescriptor: EntityDescriptor | undefined;
+  let SPSSODescriptor: SPSSO | undefined;
+  let IDPSSODescriptor: IDPSSO | undefined;
+  let Organization: Organization | undefined;
+  let OrganizationName: Localized | undefined;
+  let OrganizationDisplayName: Localized | undefined;
+  let OrganizationURL: Localized | undefined;
+  let KeyDescriptor: Key | undefined;
+  let SingleSignOnService: Endpoint | undefined;
+  let SingleLogoutService: Endpoint | undefined;
+  let AssertionConsumerService: IndexedEndpoint | undefined;
+  let AttributeConsumingService: AttributeConsumingService | undefined;
+  let ServiceName: Localized | undefined;
+  let ServiceDescription: Localized | undefined;
+  let RequestedAttribute: RequestedAttribute | undefined;
+  let AttributeValue: boolean = false;
+  let X509Certificate: boolean = false;
+
+  // Namespaces
+  const md: string = 'urn:oasis:names:tc:SAML:2.0:metadata';
+  const ds: string = 'http://www.w3.org/2000/09/xmldsig#';
+  const saml: string = 'urn:oasis:names:tc:SAML:2.0:assertion';
 
   parser.on('opentag', (tag) => {
-    function a(name: string): string {
-      const attribute = tag.attributes[name]
-      return attribute && attribute.value
+    function opt(name: string): string | undefined {
+      const attribute = tag.attributes[name];
+      return attribute && attribute.value;
+    }
+    function req(name: string): string {
+      const attribute = tag.attributes[name];
+      if (attribute) {
+        return attribute.value;
+      } else {
+        throw new Error(`The attribute "${name}" is required!`);
+      }
+    }
+    function createSSO() {
+      return {
+        validUntil: opt('validUntil'),
+        cacheDuration: opt('cacheDuration'),
+        errorURL: opt('errorURL'),
+        protocolSupportEnumeration: parseEnumeration(opt('protocolSupportEnumeration')),
+        keys: [],
+        singleLogoutServices: [],
+      };
+    }
+    function createEndpoint() {
+      return {
+        binding: req('Binding'),
+        location: req('Location'),
+        responseLocation: opt('ResponseLocation'),
+      };
+    }
+    function createLocalized() {
+      return {
+        lang: req('xml:lang'),
+        content: '',
+      };
     }
 
-    ns = {...ns, ...tag.ns};
+    nss.push({...nss[nss.length - 1], ...tag.ns});
 
-    switch (ns[tag.prefix]) {
-      case 'urn:oasis:names:tc:SAML:2.0:metadata':
+    // Paths are (transitively) verified up to the root, that way we reject any sneaky fake roots inside sections where anything is allowed 
+    const ns = nss[nss.length - 1][tag.prefix];
+    switch (ns) {
+      case md:
         switch (tag.local) {
           case 'EntitiesDescriptor':
-            if (tags.match(p.and(p.root, p.repeat(p.tag('EntitiesDescriptor'))))) { 
+            if (tags.match(p.and(p.root, p.repeat(p.tag(md, 'EntitiesDescriptor'))))) { 
               EntitiesDescriptorStack.push({
                 entities: [],
-                validUntil: a('validUntil'),
-                cacheDuration: a('cacheDuration'),
-                name: a('Name')
+                validUntil: opt('validUntil'),
+                cacheDuration: opt('cacheDuration'),
+                name: opt('Name')
               });
             }
             break;
           case 'EntityDescriptor':
-            if (tags.match(p.and(p.root, p.repeat(p.tag('EntitiesDescriptor'))))) { 
+            if (tags.match(p.and(p.root, p.repeat(p.tag(md, 'EntitiesDescriptor'))))) { 
               EntityDescriptor = {
-                entityID: a('entityID'),
+                entityID: req('entityID'),
+                validUntil: opt('validUntil'),
+                cacheDuration: opt('cacheDuration'),
                 idps: [],
                 sps: [],
               };
             }
             break;
           case 'IDPSSODescriptor':
-            if (tags.match(p.tag('EntityDescriptor'))) {
+            if (EntityDescriptor &&
+                tags.match(p.tag(md, 'EntityDescriptor'))) {
               IDPSSODescriptor = {
-                keys: [],
-                wantAuthnRequestsSigned: parseBoolean(a('WantAuthnRequestsSigned')),
-                protocolSupportEnumeration: parseEnumeration(a('protocolSupportEnumeration')),
-                singleLogoutServices: [],
+                ...createSSO(),
+                wantAuthnRequestsSigned: parseBoolean(opt('WantAuthnRequestsSigned')),
                 singleSignOnServices: [],
-                nameIDFormats: [],
               };
             }
             break;
           case 'SPSSODescriptor':
-            if (tags.match(p.tag('EntityDescriptor'))) {
+            if (EntityDescriptor &&
+                tags.match(p.tag(md, 'EntityDescriptor'))) {
               SPSSODescriptor = {
-                keys: [],
-                authnRequestsSigned: parseBoolean(a('AuthnRequestsSigned')),
-                wantAssertionsSigned: parseBoolean(a('WantAssertionsSigned')),
-                protocolSupportEnumeration: parseEnumeration(a('protocolSupportEnumeration')),
-                singleLogoutServices: [],
+                ...createSSO(),
+                authnRequestsSigned: parseBoolean(opt('AuthnRequestsSigned')),
+                wantAssertionsSigned: parseBoolean(opt('WantAssertionsSigned')),
                 assertionConsumerServices: [],
-                nameIDFormats: [],
+                attributeConsumingServices: [],
               };
             }
             break;
           case 'SingleLogoutService':
-            if (tags.match(p.or([p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
-              SingleLogoutService = {
-                binding: a('Binding'),
-                location: a('Location'),
-                responseLocation: a('ResponseLocation')
-              };
+            if (EntityDescriptor && 
+                tags.match(p.and(p.tag(md, 'EntityDescriptor'), p.or([p.tag(md, 'IDPSSODescriptor'), p.tag(md, 'SPSSODescriptor')])))) {
+              SingleLogoutService = createEndpoint();
             }
             break;
           case 'SingleSignOnService':
-            if (tags.match(p.tag('IDPSSODescriptor'))) {
-              SingleSignOnService = {
-                binding: a('Binding'),
-                location: a('Location'),
-                responseLocation: a('ResponseLocation')
-              };
+            if (EntityDescriptor && 
+                tags.match(p.and(p.tag(md, 'EntityDescriptor'), p.tag(md, 'IDPSSODescriptor')))) {
+              SingleSignOnService = createEndpoint();
             }
             break;
           case 'AssertionConsumerService':
-            if (tags.match(p.tag('SPSSODescriptor'))) {
+            if (EntityDescriptor && 
+                tags.match(p.and(p.tag(md, 'EntityDescriptor'), p.tag(md, 'SPSSODescriptor')))) {
               AssertionConsumerService = {
-                 binding: a('Binding'),
-                 location: a('Location'),
-                 responseLocation: a('ResponseLocation'),
-                 index: parseInteger(a('index'))!,
-                 isDefault: parseBoolean(a('isDefault'))
+                ...createEndpoint(),
+                index: parseInteger(opt('index'))!,
+                isDefault: parseBoolean(opt('isDefault')),
+              };
+            }
+          case 'AttributeConsumingService':
+            if (EntityDescriptor && 
+                tags.match(p.and(p.tag(md, 'EntityDescriptor'), p.tag(md, 'SPSSODescriptor')))) {
+              AttributeConsumingService = {
+                serviceName: [],
+                serviceDescription: [],
+                requestedAttributes: [],
+                index: parseInteger(opt('index'))!,
+                isDefault: parseBoolean(opt('isDefault')),
+              };
+            }
+            break;
+          case 'ServiceName':
+            if (AttributeConsumingService &&
+                tags.match(p.tag(md, 'AttributeConsumingService'))) {
+              ServiceName = createLocalized();
+            }
+            break;
+          case 'ServiceDescription':
+            if (AttributeConsumingService &&
+                tags.match(p.tag(md, 'AttributeConsumingService'))) {
+              ServiceDescription = createLocalized();
+            }
+            break;
+          case 'RequestedAttribute':
+            if (AttributeConsumingService &&
+                tags.match(p.tag(md, 'AttributeConsumingService'))) {
+              RequestedAttribute = {
+                name: req('Name'),
+                nameFormat: opt('NameFormat'),
+                friendlyName: opt('FriendlyName'),
+                values: [],
+                isRequired: parseBoolean(opt('isRequired')),
               };
             }
             break;
           case 'KeyDescriptor':
-            if (tags.match(p.or([p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
+            if (EntityDescriptor &&
+                tags.match(p.and(p.tag(md, 'EntityDescriptor'), p.or([p.tag(md, 'IDPSSODescriptor'), p.tag(md, 'SPSSODescriptor')])))) {
               KeyDescriptor = {
-                use: parseUse(a('use')),
+                use: parseUse(opt('use')),
                 certificates: []
               };
             }
             break;
           case 'Organization':
-            if (tags.match(p.or([p.tag('EntityDescriptor'), p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
+            if (EntityDescriptor && 
+                tags.match(p.and(p.tag(md, 'EntityDescriptor'), p.or([p.empty, p.tag(md, 'IDPSSODescriptor'), p.tag(md, 'SPSSODescriptor')])))) {
               Organization = {
                 organizationName: [],
                 organizationDisplayName: [],
@@ -546,65 +665,59 @@ export default async function(stream: Readable): Promise<Metadata | undefined> {
             }
             break;
           case 'OrganizationName':
-            if (tags.match(p.tag('Organization'))) {
-              OrganizationName = {
-                lang: a('xml:lang')!,
-                content: ''
-              };
+            if (Organization &&
+                tags.match(p.tag(md, 'Organization'))) {
+              OrganizationName = createLocalized();
             }
             break;
           case 'OrganizationDisplayName':
-            if (tags.match(p.tag('Organization'))) {
-              OrganizationDisplayName = {
-                lang: a('xml:lang')!,
-                content: ''
-              };
+            if (Organization &&
+                tags.match(p.tag(md, 'Organization'))) {
+              OrganizationDisplayName = createLocalized();
             }
             break;
           case 'OrganizationURL':
-            if (tags.match(p.tag('Organization'))) {
-              OrganizationURL = {
-                lang: a('xml:lang')!,
-                content: ''
-              };
-            }
-            break;
-          case 'NameIDFormat':
-            if (tags.match(p.or([p.tag('IDPSSODescriptor'), p.tag('SPSSODescriptor')]))) {
-              NameIDFormat = new String('');
+            if (Organization && 
+                tags.match(p.tag(md, 'Organization'))) {
+              OrganizationURL = createLocalized();
             }
             break;
         }
         break;
-      case "http://www.w3.org/2000/09/xmldsig#":
+      case ds:
         switch (tag.local) {
-          case 'KeyInfo':
-            if (tags.match(p.tag('KeyDescriptor'))) {
-              KeyInfo = true;
-            }
-            break;
-          case 'X509Data':
-            if (tags.match(p.tag('KeyInfo'))) {
-              X509Data = true;
-            }
-            break;
           case 'X509Certificate':
-            if (tags.match(p.tag('X509Data'))) {
+            if (KeyDescriptor &&
+                tags.match(p.and(p.and(p.tag(md, 'KeyDescriptor'), p.tag(ds, 'KeyInfo')), p.tag(ds, 'X509Data')))) {
               X509Certificate = true;
+            }
+            break;
+        }
+        break;
+      case saml:
+        switch (tag.local) {
+          case 'AttributeValue':
+            if (RequestedAttribute &&
+                tags.match(p.tag(md, 'Attribute'))) {
+              AttributeValue = true;
             }
             break;
         }
         break;
     }
 
-    tags.push(tag.local);
+    tags.push(ns, tag.local);
   });
 
   parser.on('text', (text: string) => {
-    if (KeyDescriptor && KeyInfo && X509Data && X509Certificate) {
+    if (KeyDescriptor && X509Certificate) {
       KeyDescriptor.certificates.push(text);
-    } else if (NameIDFormat) {
-      NameIDFormat = text;
+    } else if (RequestedAttribute && AttributeValue) {
+      RequestedAttribute.values.push(text);
+    } else if (ServiceName) {
+      ServiceName.content = text;
+    } else if (ServiceDescription) {
+      ServiceDescription.content = text;
     } else if (OrganizationName) {
       OrganizationName.content = text;
     } else if (OrganizationDisplayName) {
@@ -615,8 +728,9 @@ export default async function(stream: Readable): Promise<Metadata | undefined> {
   });
 
   parser.on('closetag', (tag) => {
-    switch (ns[tag.prefix]) {
-      case 'urn:oasis:names:tc:SAML:2.0:metadata':
+    const ns = nss[nss.length - 1][tag.prefix];
+    switch (ns) {
+      case md:
         switch (tag.local) {
           case 'EntitiesDescriptor': {
             const EntitiesDescriptor = EntitiesDescriptorStack.pop(); 
@@ -667,6 +781,29 @@ export default async function(stream: Readable): Promise<Metadata | undefined> {
             }
             AssertionConsumerService = undefined;
             break;
+          case 'AttributeConsumingService':
+            if (AttributeConsumingService) {
+              SPSSODescriptor!.attributeConsumingServices.push(AttributeConsumingService);
+            }
+            break;
+          case 'ServiceName':
+            if (ServiceName) {
+              AttributeConsumingService!.serviceName.push(ServiceName);
+            }
+            ServiceName = undefined;
+            break;
+          case 'ServiceDescription':
+            if (ServiceDescription) {
+              AttributeConsumingService!.serviceDescription.push(ServiceDescription);
+            }
+            ServiceDescription = undefined;
+            break;
+          case 'RequestedAttribute':
+            if (RequestedAttribute) {
+              AttributeConsumingService!.requestedAttributes.push(RequestedAttribute);
+            }
+            RequestedAttribute = undefined;
+            break;
           case 'KeyDescriptor': {
             const x = IDPSSODescriptor || SPSSODescriptor;
             if (KeyDescriptor) {
@@ -699,31 +836,25 @@ export default async function(stream: Readable): Promise<Metadata | undefined> {
             }
             OrganizationURL = undefined;
             break;
-          case 'NameIDFormat': {
-            const x = IDPSSODescriptor || SPSSODescriptor;
-            if (NameIDFormat) {
-              x!.nameIDFormats.push(NameIDFormat.valueOf());
-            }
-            NameIDFormat = undefined;
-            break;
-          }
         }
         break;
-      case "http://www.w3.org/2000/09/xmldsig#":
+      case ds:
         switch (tag.local) {
-          case 'KeyInfo':
-            KeyInfo = false;
-            break;
-          case 'X509Data':
-            X509Data = false;
-            break;
           case 'X509Certificate':
             X509Certificate = false;
             break;
         }
         break;
+      case saml:
+        switch (tag.local) {
+          case 'AttributeValue':
+            AttributeValue = false;
+            break;
+        }
+        break;
     }
-    tags.pop(tag.local);
+    tags.pop(ns, tag.local);
+    nss.pop();
   });
   const end: Promise<Metadata | undefined> = new Promise((resolve, reject) => {
     parser.on('end', () =>  {return resolve(metadata)});
